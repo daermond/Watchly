@@ -91,8 +91,12 @@ class RewatchService:
             scored.append((score * REACTION_BOOST[sampled_item.source_type], item))
 
         scored.sort(key=lambda x: x[0], reverse=True)
+        # Keep the bounded pool, rotating its first screen without discarding
+        # the remaining titles from the longer row.
         top = scored[: limit * 2]
-        picked = sorted(random.sample(top, k=min(limit, len(top))), key=lambda x: x[0], reverse=True)
+        leaders = sorted(random.sample(top, k=min(limit, len(top))), key=lambda pair: pair[0], reverse=True)
+        leader_ids = {item["id"] for _, item in leaders}
+        picked = leaders + [pair for pair in scored if pair[1]["id"] not in leader_ids]
 
         return await RecommendationMetadata.fetch_batch(
             self.tmdb_service, [item for _, item in picked], content_type, user_settings=self.user_settings

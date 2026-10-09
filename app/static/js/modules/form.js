@@ -83,7 +83,8 @@ function getRequestPayload() {
             shuffle: catalog.shuffle === true,
             rows: catalog.rows
         })),
-        language: languageSelect?.value || 'english',
+        language: languageSelect?.value || 'en-US',
+        selected_countries: Array.from(document.getElementById('countrySelect')?.selectedOptions || []).map(option => option.value),
         year_min: parseInt(document.getElementById('yearMin')?.value || String(YEAR_RANGE_DEFAULTS.min), 10),
         // The slider's right end means "through today", stored as null so it never
         // turns into a hard cap when the year rolls over.
@@ -132,6 +133,7 @@ function buildTokenPayload(formData) {
         password: formData.password,
         catalogs: formData.catalogs,
         language: formData.language,
+        selected_countries: formData.selected_countries,
         year_min: formData.year_min,
         year_max: formData.year_max,
         popularity: formData.popularity,
@@ -153,6 +155,8 @@ function buildTokenPayload(formData) {
         trakt_refresh_token: window._watchlyOAuth?.trakt?.refresh_token || undefined,
         trakt_token_expires_at: window._watchlyOAuth?.trakt?.expires_at || undefined,
         simkl_access_token: window._watchlyOAuth?.simkl?.access_token || undefined,
+        simkl_refresh_token: window._watchlyOAuth?.simkl?.refresh_token || undefined,
+        simkl_token_expires_at: window._watchlyOAuth?.simkl?.expires_at || undefined,
         mdblist_api_key: formData.mdblist_api_key || undefined,
         nuvio_access_token: window._watchlyOAuth?.nuvio?.access_token || undefined,
         nuvio_refresh_token: window._watchlyOAuth?.nuvio?.refresh_token || undefined,
@@ -248,6 +252,8 @@ function initializeFormSubmission() {
                     profilePayload.trakt_refresh_token = undefined;
                     profilePayload.trakt_token_expires_at = undefined;
                     profilePayload.simkl_access_token = undefined;
+                    profilePayload.simkl_refresh_token = undefined;
+                    profilePayload.simkl_token_expires_at = undefined;
                     profilePayload.mdblist_api_key = undefined;
                     if (batchProvider === 'nuvio') {
                         profilePayload.authKey = undefined;
@@ -821,6 +827,7 @@ function initializeWatchHistorySource() {
     window._watchlyOAuth = window._watchlyOAuth || {};
 
     window.addEventListener('message', (event) => {
+        if (event.origin !== window.location.origin) return;
         const data = event.data;
         if (!data || !data.provider || !data.tokens) return;
 

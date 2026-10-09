@@ -149,6 +149,15 @@
                 </div>
 
                 <div>
+                    <label for="countrySelect" class="field-label">Production countries (optional)</label>
+                    <select id="countrySelect" class="input" multiple size="6" aria-describedby="countryHint">
+                        {% for country in countries %}
+                        <option value="{{ country.iso_3166_1 }}">{{ country.english_name | e }}</option>
+                        {% endfor %}
+                    </select>
+                    <p id="countryHint" class="field-hint">Leave empty for all countries. Select one or more to restrict where titles were produced. This does not change audio language. On a computer, use Ctrl or Command to select multiple countries or clear a selection.</p>
+                </div>
+                <div>
                     <label for="sortingOrderSelect" class="field-label">Movies and series order</label>
                     <div class="relative">
                         <select id="sortingOrderSelect" class="input cursor-pointer appearance-none pr-10">

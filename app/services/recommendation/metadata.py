@@ -5,6 +5,7 @@ from loguru import logger
 
 from app.core.constants import DEFAULT_CONCURRENCY_LIMIT
 from app.services.poster_ratings.factory import PosterProvider, poster_ratings_factory
+from app.services.recommendation.filtering import matches_details_preferences
 
 
 class RecommendationMetadata:
@@ -174,7 +175,9 @@ class RecommendationMetadata:
                 except Exception:
                     return {}
 
-        successful_details = [d for d in details_list if d]
+        successful_details = [
+            d for d in details_list if d and matches_details_preferences(d, user_settings, media_type)
+        ]
         image_tasks = [_images_one(d) for d in successful_details]
         images_list = await asyncio.gather(*image_tasks, return_exceptions=True)
 

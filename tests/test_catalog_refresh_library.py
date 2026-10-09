@@ -21,6 +21,12 @@ class FakeRedis:
     async def get(self, key: str):
         return self.data.get(key)
 
+    async def getex(self, key: str, ttl: int):
+        value = await self.get(key)
+        if value is not None:
+            await self.expire(key, ttl)
+        return value
+
     async def set(self, key: str, value, ttl=None):
         self.data[key] = value
         return True
@@ -59,7 +65,7 @@ def refresh(monkeypatch):
     """Real token_store and auth_service over a fake Redis. Only Stremio, the library
     fetch, the TMDB-backed profile build and the manifest assembly are stubbed."""
     fake = FakeRedis()
-    for name in ("get", "set", "delete", "expire", "delete_by_pattern"):
+    for name in ("get", "getex", "set", "delete", "expire", "delete_by_pattern"):
         monkeypatch.setattr(f"app.services.user_cache.redis_service.{name}", getattr(fake, name))
     monkeypatch.setattr("app.services.token_store.settings.TOKEN_SALT", "unit-test-salt")
     token_store._get_user_data_cached.cache_clear()

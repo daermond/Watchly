@@ -327,32 +327,7 @@ class ProfileService:
                 token_missing = True
         elif source == "simkl":
             if user_settings and user_settings.simkl_access_token:
-                from app.core.config import settings as app_settings
-                from app.services.simkl import simkl_service
-
-                try:
-                    watch_history = await simkl_service.get_history(
-                        user_settings.simkl_access_token,
-                        app_settings.SIMKL_CLIENT_ID or "",
-                    )
-                except httpx.HTTPStatusError as e:
-                    if e.response.status_code in (401, 403):
-                        token_revoked = True
-                        logger.error(
-                            f"Simkl token rejected (HTTP {e.response.status_code}). "
-                            "Clearing stored token; user must reconnect Simkl."
-                        )
-                    else:
-                        logger.error(
-                            f"Simkl history fetch failed (HTTP {e.response.status_code}: {e}). "
-                            "Falling back to Stremio library."
-                        )
-                    watch_history = None
-                except Exception as e:
-                    logger.error(
-                        f"Simkl history fetch failed ({type(e).__name__}: {e}). Falling back to Stremio library."
-                    )
-                    watch_history = None
+                watch_history, token_revoked = await self._fetch_simkl_history(token, user_settings)
             else:
                 token_missing = True
         elif source == "mdblist":
@@ -539,6 +514,79 @@ class ProfileService:
 
         return new_access
 
+    async def _fetch_simkl_history(
+        self, token: str | None, user_settings: UserSettings
+    ) -> tuple[WatchHistory | None, bool]:
+        from app.core.config import settings as app_settings
+        from app.services.simkl import simkl_service
+
+        access_token = user_settings.simkl_access_token
+        can_refresh = bool(token and user_settings.simkl_refresh_token)
+        refreshed = False
+        if can_refresh and time.time() >= (user_settings.simkl_token_expires_at or 0) - 86400:
+            access_token = await self._refresh_simkl_token(token, user_settings)
+            if not access_token:
+                return None, False  # An outage must not disconnect the account.
+            refreshed = True
+        while True:
+            try:
+                return await simkl_service.get_history(access_token, app_settings.SIMKL_CLIENT_ID or ""), False
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code not in (401, 403):
+                    logger.warning(f"Simkl history unavailable (HTTP {exc.response.status_code}).")
+                    return None, False
+                if refreshed or not can_refresh:
+                    return None, True
+                access_token = await self._refresh_simkl_token(token, user_settings, force=True)
+                if not access_token:
+                    return None, False
+                refreshed = True
+            except Exception as exc:
+                logger.warning(f"Simkl history unavailable ({type(exc).__name__}).")
+                return None, False
+
+    async def _refresh_simkl_token(self, token: str, user_settings: UserSettings, *, force: bool = False) -> str | None:
+        """One refresh owner per account; queued requests reuse the stored access token."""
+        from app.core.config import settings as app_settings
+        from app.services.simkl import simkl_service
+
+        try:
+            client = await redis_service.get_client()
+            async with client.lock(f"watchly:simkl_refresh_lock:{token}", timeout=45, blocking_timeout=15):
+                credentials = copy.deepcopy(await token_store.get_user_data(token, fresh=True))
+                if not credentials:
+                    return None
+                stored = credentials.setdefault("settings", {})
+                access = stored.get("simkl_access_token")
+                if access and (
+                    access != user_settings.simkl_access_token
+                    or (not force and time.time() < (stored.get("simkl_token_expires_at") or 0) - 86400)
+                ):
+                    user_settings.simkl_access_token = access
+                    user_settings.simkl_refresh_token = stored.get("simkl_refresh_token")
+                    user_settings.simkl_token_expires_at = stored.get("simkl_token_expires_at")
+                    return access
+                refresh = stored.get("simkl_refresh_token")
+                if not refresh:
+                    return None
+                data = await simkl_service.refresh_token(
+                    refresh, app_settings.SIMKL_CLIENT_ID or "", app_settings.SIMKL_CLIENT_SECRET or ""
+                )
+                access = data.get("access_token")
+                if not access:
+                    return None
+                stored["simkl_access_token"] = access
+                stored["simkl_refresh_token"] = data.get("refresh_token") or refresh
+                stored["simkl_token_expires_at"] = int(time.time()) + int(data.get("expires_in") or 604800)
+                await token_store.update_user_data(token, credentials)
+                user_settings.simkl_access_token = access
+                user_settings.simkl_refresh_token = stored["simkl_refresh_token"]
+                user_settings.simkl_token_expires_at = stored["simkl_token_expires_at"]
+                return access
+        except Exception as exc:
+            logger.warning(f"Simkl token refresh unavailable ({type(exc).__name__}); keeping stored credentials.")
+            return None
+
     async def _fetch_nuvio_history(
         self, token: str | None, user_settings: UserSettings
     ) -> tuple[WatchHistory | None, bool]:
@@ -659,9 +707,10 @@ class ProfileService:
                         settings_dict[field] = None
                         mutated = True
             elif source == "simkl":
-                if settings_dict.get("simkl_access_token"):
-                    settings_dict["simkl_access_token"] = None
-                    mutated = True
+                for field in ("simkl_access_token", "simkl_refresh_token", "simkl_token_expires_at"):
+                    if settings_dict.get(field):
+                        settings_dict[field] = None
+                        mutated = True
             elif source == "mdblist":
                 if settings_dict.get("mdblist_api_key"):
                     settings_dict["mdblist_api_key"] = None

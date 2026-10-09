@@ -18,6 +18,7 @@ _SECRET_SETTINGS_FIELDS = (
     "trakt_access_token",
     "trakt_refresh_token",
     "simkl_access_token",
+    "simkl_refresh_token",
     "mdblist_api_key",
     "nuvio_access_token",
     "nuvio_refresh_token",

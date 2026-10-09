@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from loguru import logger
 
 from app.core.security import redact_token
-from app.core.settings import UserSettings, settings_from_credentials
+from app.core.settings import UserSettings, resolve_tmdb_api_key, settings_from_credentials
 from app.models.library import LibraryCollection
 from app.services.auth import auth_service
 from app.services.stremio.service import StremioBundle
@@ -133,7 +133,10 @@ async def fetch_library_for_source(
     if source in ("trakt", "simkl", "mdblist", "nuvio"):
         from app.services.profile.service import ProfileService
 
-        profile_service = ProfileService()
+        profile_service = ProfileService(
+            language=user_settings.language,
+            tmdb_api_key=resolve_tmdb_api_key(user_settings),
+        )
         external = await profile_service.fetch_external_library(source, user_settings, token)
         if external is not None:
             logger.info(

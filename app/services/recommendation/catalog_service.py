@@ -18,6 +18,7 @@ from app.services.profile.service import ProfileService
 from app.services.recommendation.all_based import AllBasedService
 from app.services.recommendation.catalog_utils import clean_meta, shuffle_data_if_needed
 from app.services.recommendation.creators import CreatorsService
+from app.services.recommendation.filtering import filter_watched_by_imdb
 from app.services.recommendation.item_based import ItemBasedService
 from app.services.recommendation.rewatch import RewatchService
 from app.services.recommendation.theme_based import ThemeBasedService
@@ -310,7 +311,9 @@ class CatalogService:
 
             from app.services.recommendation.metadata import RecommendationMetadata
 
-            return await RecommendationMetadata.fetch_batch(tmdb_service, items, content_type, user_settings=None)
+            return await RecommendationMetadata.fetch_batch(
+                tmdb_service, items, content_type, user_settings=user_settings
+            )
         except Exception as e:
             logger.warning(f"Failed to fetch trending items: {e}")
             return []
@@ -444,6 +447,9 @@ class CatalogService:
             logger.warning(f"Unknown catalog ID: {catalog_id}")
             recommendations = []
 
+        if catalog_id != "watchly.rewatch":
+            recommendations = filter_watched_by_imdb(recommendations, watched_imdb)
+            recommendations = [item for item in recommendations if item.get("_tmdb_id") not in watched_tmdb]
         return recommendations
 
 

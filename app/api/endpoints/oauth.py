@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import secrets
 import time
 from urllib.parse import urlencode
@@ -104,7 +106,12 @@ async def trakt_callback(request: Request, code: str, state: str | None = None):
 
 # ── Simkl OAuth ──────────────────────────────────────────────────────────────
 
-SIMKL_AUTH_URL = "https://simkl.com/oauth/authorize"
+SIMKL_AUTH_URL = "https://simkl.com/oauth2/authorize"
+_SIMKL_PKCE_COOKIE = "watchly_simkl_pkce"
+
+
+def _pkce_challenge(verifier: str) -> str:
+    return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
 
 
 @router.get("/auth/simkl")
@@ -115,16 +122,30 @@ async def simkl_auth_redirect(request: Request):
 
     redirect_uri = f"{settings.HOST_NAME}/auth/simkl/callback"
     state = secrets.token_urlsafe(32)
+    verifier = secrets.token_urlsafe(32)
     params = urlencode(
         {
             "response_type": "code",
             "client_id": settings.SIMKL_CLIENT_ID,
             "redirect_uri": redirect_uri,
             "state": state,
+            "scope": "media:read",
+            "code_challenge": _pkce_challenge(verifier),
+            "code_challenge_method": "S256",
         }
     )
     response = RedirectResponse(f"{SIMKL_AUTH_URL}?{params}")
     _set_state_cookie(response, "simkl", state)
+    response.set_cookie(
+        _SIMKL_PKCE_COOKIE,
+        verifier,
+        max_age=_OAUTH_STATE_TTL_SECONDS,
+        httponly=True,
+        secure=settings.APP_ENV == "production",
+        samesite="lax",
+        path="/",
+    )
+    response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -135,6 +156,9 @@ async def simkl_callback(request: Request, code: str, state: str | None = None):
         raise HTTPException(status_code=501, detail="Simkl integration is not configured on this server.")
 
     _verify_state(request, "simkl", state)
+    verifier = request.cookies.get(_SIMKL_PKCE_COOKIE)
+    if not verifier:
+        raise HTTPException(status_code=400, detail="Missing SIMKL PKCE verifier. Please connect again.")
 
     redirect_uri = f"{settings.HOST_NAME}/auth/simkl/callback"
 
@@ -144,6 +168,7 @@ async def simkl_callback(request: Request, code: str, state: str | None = None):
             redirect_uri,
             settings.SIMKL_CLIENT_ID,
             settings.SIMKL_CLIENT_SECRET,
+            verifier,
         )
         access_token = token_data.get("access_token", "")
 
@@ -153,13 +178,21 @@ async def simkl_callback(request: Request, code: str, state: str | None = None):
         logger.error(f"Simkl OAuth callback failed: {e}")
         return HTMLResponse(_oauth_error_page("Simkl", "Could not complete sign-in. Please try again."))
 
-    return HTMLResponse(
+    response = HTMLResponse(
         _oauth_success_page(
             provider="simkl",
             username=str(username),
-            tokens={"access_token": access_token},
+            tokens={
+                "access_token": access_token,
+                "refresh_token": token_data.get("refresh_token", ""),
+                "expires_at": int(time.time()) + int(token_data.get("expires_in") or 604800),
+            },
         )
     )
+    response.delete_cookie(_SIMKL_PKCE_COOKIE, path="/")
+    response.delete_cookie(f"{_OAUTH_STATE_COOKIE_PREFIX}simkl", path="/")
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 # ── HTML helpers ─────────────────────────────────────────────────────────────

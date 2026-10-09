@@ -69,16 +69,32 @@ class SimklService:
     async def close(self) -> None:
         await self.client.close()
 
-    async def exchange_code(self, code: str, redirect_uri: str, client_id: str, client_secret: str) -> dict[str, Any]:
+    async def exchange_code(
+        self, code: str, redirect_uri: str, client_id: str, client_secret: str, code_verifier: str
+    ) -> dict[str, Any]:
         """Exchange authorization code for an access token."""
         return await self.client.post(
-            "/oauth/token",
+            "/oauth2/token",
+            max_tries=1,  # A consumed authorization code must never be retried.
             json={
                 "code": code,
                 "client_id": client_id,
                 "client_secret": client_secret,
                 "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
+                "code_verifier": code_verifier,
+            },
+        )
+
+    async def refresh_token(self, refresh_token: str, client_id: str, client_secret: str) -> dict[str, Any]:
+        return await self.client.post(
+            "/oauth2/token",
+            max_tries=1,
+            json={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": client_id,
+                "client_secret": client_secret,
             },
         )
 

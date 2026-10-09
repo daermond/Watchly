@@ -109,6 +109,21 @@ class UserSettings(BaseModel):
     catalogs: list[CatalogConfig]
     stremio_profile_id: str | None = None
     stremio_profile_name: str | None = None
+
+    @field_validator("selected_countries")
+    @classmethod
+    def validate_countries(cls, values):
+        from app.services.language_service import get_countries_list
+
+        valid = {item["iso_3166_1"] for item in get_countries_list()}
+        normalized = list(dict.fromkeys(value.strip().upper() for value in values))
+        if any(value not in valid for value in normalized):
+            raise ValueError("Unknown production country")
+        return normalized
+
+    selected_countries: list[str] = Field(
+        default_factory=list, description="Allowed production countries; empty means all"
+    )
     language: str = "en-US"
     poster_rating: PosterRatingConfig | None = Field(default=None, description="Poster rating provider configuration")
     excluded_movie_genres: list[str] = Field(default_factory=list)
@@ -133,6 +148,8 @@ class UserSettings(BaseModel):
         default=None, description="Epoch seconds when the Trakt access token expires"
     )
     simkl_access_token: str | None = Field(default=None, description="Simkl OAuth access token")
+    simkl_refresh_token: str | None = Field(default=None, description="Simkl OAuth refresh token")
+    simkl_token_expires_at: int | None = Field(default=None, description="Simkl token expiry (Unix timestamp)")
     mdblist_api_key: str | None = Field(default=None, description="MDBList API key; also the account identity")
     nuvio_access_token: str | None = Field(default=None, description="Nuvio session access token")
     nuvio_refresh_token: str | None = Field(default=None, description="Nuvio session refresh token")

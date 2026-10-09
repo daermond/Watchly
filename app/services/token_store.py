@@ -2,6 +2,7 @@ import base64
 import copy
 import json
 import secrets
+from functools import lru_cache
 from typing import Any
 
 import redis.asyncio as redis
@@ -41,6 +42,12 @@ class TokenStore:
             raise RuntimeError("TOKEN_SALT must be set to a non-default value before storing credentials.")
 
     def _get_cipher(self) -> Fernet:
+        self._ensure_secure_salt()
+        return self._cipher_for_salt(settings.TOKEN_SALT)
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _cipher_for_salt(token_salt: str) -> Fernet:
         salt = b"x7FDf9kypzQ1LmR32b8hWv49sKq2Pd8T"
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -49,7 +56,7 @@ class TokenStore:
             iterations=200_000,
         )
 
-        key = base64.urlsafe_b64encode(kdf.derive(settings.TOKEN_SALT.encode("utf-8")))
+        key = base64.urlsafe_b64encode(kdf.derive(token_salt.encode("utf-8")))
         return Fernet(key)
 
     def encrypt_token(self, token: str) -> str:
@@ -242,7 +249,12 @@ class TokenStore:
 
         return None
 
-    async def get_user_data(self, token: str) -> dict[str, Any] | None:
+    async def get_user_data(self, token: str, *, fresh: bool = False) -> dict[str, Any] | None:
+        if fresh:
+            try:
+                self._get_user_data_cached.cache_invalidate(token)
+            except KeyError:
+                pass
         data = await self._get_user_data_cached(token)
         if data is None:
             # Don't let a missing-token result get pinned in the per-process cache;
@@ -325,6 +337,7 @@ class TokenStore:
         except Exception as e:
             logger.warning(f"Failed to invalidate user data cache during token deletion: {e}")
 
+    @alru_cache(maxsize=1, ttl=43200)
     async def count_users(self) -> int:
         """Count total users by scanning Redis keys with the configured prefix.
 

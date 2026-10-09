@@ -11,7 +11,7 @@ from app.services.profile.scorer import ProfileScorer
 from app.services.profile.scoring import ScoringService
 from app.services.recommendation.candidate_sources import CandidateFetcher
 from app.services.recommendation.diversity import apply_diversity_caps
-from app.services.recommendation.filtering import filter_watched_by_imdb
+from app.services.recommendation.filtering import RecommendationFiltering, filter_by_genres, filter_watched_by_imdb
 from app.services.recommendation.metadata import RecommendationMetadata
 from app.services.recommendation.scoring import RecommendationScoring
 from app.services.recommendation.utils import content_type_to_mtype
@@ -66,7 +66,11 @@ class TopPicksService:
         all_candidates = await self.candidate_fetcher.fetch_all_candidates(profile, library_items, content_type, mtype)
 
         # 2. Filter out watched items
-        filtered_candidates = [item for item in all_candidates.values() if item.get("id") not in watched_tmdb]
+        filtered_candidates = filter_by_genres(
+            list(all_candidates.values()),
+            watched_tmdb,
+            RecommendationFiltering.get_excluded_genre_ids(self.user_settings, content_type),
+        )
         logger.info(f"Found {len(filtered_candidates)} candidates after filtering out watched items and user settings")
 
         # 3. Score all candidates with profile

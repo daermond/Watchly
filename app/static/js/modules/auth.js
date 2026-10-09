@@ -517,6 +517,10 @@ async function fetchIdentity(payload) {
             const s = data.settings;
             const hints = data.secret_hints || {};
             if (s.language && languageSelect) languageSelect.value = s.language;
+            const countrySelect = document.getElementById('countrySelect');
+            if (countrySelect) Array.from(countrySelect.options).forEach(option => {
+                option.selected = (s.selected_countries || []).includes(option.value);
+            });
 
             // Popularity & Year Range
             const popularitySelect = document.getElementById('popularitySelect');
@@ -799,6 +803,8 @@ function restoreWatchHistoryState(settings) {
     if (settings.simkl_access_token && !hasLiveToken('simkl')) {
         window._watchlyOAuth.simkl = {
             access_token: settings.simkl_access_token,
+            refresh_token: settings.simkl_refresh_token || '',
+            expires_at: settings.simkl_token_expires_at || 0,
         };
         const simklSyncStatus = document.getElementById('simklSyncStatus');
         if (simklSyncStatus) {

@@ -281,7 +281,7 @@ All settings are environment variables. Only `TOKEN_SALT` and `HOST_NAME` are st
 These are only needed if you want the corresponding feature; Watchly runs fine with just TMDB + Redis.
 
 - **Trakt** — create an API app at [trakt.tv/oauth/applications](https://trakt.tv/oauth/applications). Set the redirect URI to `HOST_NAME/auth/trakt/callback` and put the client ID/secret in `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET`.
-- **Simkl** — create an app at [simkl.com/settings/developer](https://simkl.com/settings/developer). Set the redirect URI to `HOST_NAME/auth/simkl/callback` and put the credentials in `SIMKL_CLIENT_ID` / `SIMKL_CLIENT_SECRET`.
+- **Simkl** — create an AUTH V2 **Server apps & services** app at [simkl.com/settings/developer](https://simkl.com/settings/developer). Set the redirect URI to `HOST_NAME/auth/simkl/callback` and put the credentials in `SIMKL_CLIENT_ID` / `SIMKL_CLIENT_SECRET`. Use the HTTPS configure page in production. Watchly uses S256 PKCE, requests read-only access, and encrypts the saved refresh token so it can renew expiring access tokens.
 - **AI-named rows** — users configure an LLM provider (Gemini, OpenAI, Anthropic, or OpenRouter) with their own API key on the configure page; no server config required. Without one, rows fall back to deterministic names.
 - **Poster ratings (RPDB)** — users enter their own [RatingPosterDB](https://ratingposterdb.com/) key on the configure page; no server config required.
 

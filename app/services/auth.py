@@ -377,12 +377,14 @@ class AuthService:
                 from app.services.user_cache import user_cache as _user_cache
 
                 old_settings = existing_data.get("settings") or {}
+                # Language, countries, genres and poster preferences all affect
+                # row contents. A settings save must not serve old cached rows.
+                await _user_cache.invalidate_all_catalogs(token)
                 old_source = old_settings.get("watch_history_source", "stremio")
                 if old_source != user_settings.watch_history_source:
                     for ct in ("movie", "series"):
                         await _user_cache.invalidate_profile(token, ct)
                         await _user_cache.invalidate_watched_sets(token, ct)
-                    await _user_cache.invalidate_all_catalogs(token)
                     logger.info(
                         f"[{redact_token(token)}] watch_history_source changed "
                         f"'{old_source}' -> '{user_settings.watch_history_source}'; cleared profile/catalog caches."
@@ -425,6 +427,7 @@ class AuthService:
             language=payload.language or default_settings.language,
             catalogs=payload.catalogs if payload.catalogs else default_settings.catalogs,
             poster_rating=self._unmask_nested_key(payload.poster_rating, stored.get("poster_rating")),
+            selected_countries=payload.selected_countries,
             excluded_movie_genres=payload.excluded_movie_genres,
             excluded_series_genres=payload.excluded_series_genres,
             year_min=payload.year_min,
@@ -439,6 +442,8 @@ class AuthService:
             trakt_refresh_token=unmasked("trakt_refresh_token", payload.trakt_refresh_token),
             trakt_token_expires_at=payload.trakt_token_expires_at,
             simkl_access_token=unmasked("simkl_access_token", payload.simkl_access_token),
+            simkl_refresh_token=unmasked("simkl_refresh_token", payload.simkl_refresh_token),
+            simkl_token_expires_at=payload.simkl_token_expires_at,
             mdblist_api_key=unmasked("mdblist_api_key", payload.mdblist_api_key),
             nuvio_access_token=unmasked("nuvio_access_token", payload.nuvio_access_token),
             nuvio_refresh_token=unmasked("nuvio_refresh_token", payload.nuvio_refresh_token),

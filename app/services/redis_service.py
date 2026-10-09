@@ -67,6 +67,15 @@ class RedisService:
             logger.error(f"Failed to get key '{key}' from Redis: {exc}")
             return None
 
+    async def getex(self, key: str, ttl: int) -> str | None:
+        """Read a cache value and refresh its expiry in one atomic request."""
+        try:
+            client = await self.get_client()
+            return await client.getex(key, ex=ttl)
+        except (redis.RedisError, OSError) as exc:
+            logger.warning(f"Cache read failed: {type(exc).__name__}")
+            return None
+
     async def delete(self, key: str) -> bool:
         """Delete a key from Redis.
 

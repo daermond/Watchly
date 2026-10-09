@@ -21,6 +21,12 @@ class FakeRedis:
     async def get(self, key: str):
         return self.data.get(key)
 
+    async def getex(self, key: str, ttl: int):
+        value = await self.get(key)
+        if value is not None:
+            await self.expire(key, ttl)
+        return value
+
     async def set(self, key: str, value, ttl=None):
         self.data[key] = value
         return True
@@ -35,7 +41,7 @@ class FakeRedis:
 @pytest.fixture
 def fake_redis(monkeypatch):
     fake = FakeRedis()
-    for name in ("get", "set", "delete", "expire"):
+    for name in ("get", "getex", "set", "delete", "expire"):
         monkeypatch.setattr(f"app.services.user_cache.redis_service.{name}", getattr(fake, name))
     return fake
 

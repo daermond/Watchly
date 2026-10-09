@@ -187,7 +187,7 @@ class ThemeBasedService:
         enriched = await RecommendationMetadata.fetch_batch(
             self.tmdb_service, unique_results, content_type, user_settings=self.user_settings
         )
-        return filter_watched_by_imdb(enriched, watched_imdb)[:limit]
+        return filter_watched_by_imdb(enriched, watched_imdb)
 
     def _parse_theme_id(self, theme_id: str) -> tuple[dict, dict, dict]:
         """Parse role-based ID: watchly.theme.a:g123.f:k456.b:y1990"""

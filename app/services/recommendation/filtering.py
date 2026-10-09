@@ -253,7 +253,26 @@ def apply_discover_filters(params: dict[str, Any], user_settings: Any) -> dict[s
         if key in TMDB_DISCOVER_FILTER_KEYS:
             params.setdefault(key, value)
 
+    selected_countries = getattr(user_settings, "selected_countries", [])
+    if selected_countries:
+        params["with_origin_country"] = "|".join(selected_countries)
     return params
+
+
+def matches_details_preferences(details: dict[str, Any], user_settings: Any, content_type: str) -> bool:
+    if not user_settings:
+        return True
+    excluded = set(RecommendationFiltering.get_excluded_genre_ids(user_settings, content_type))
+    genres = {genre.get("id") for genre in details.get("genres", [])}
+    if genres.intersection(excluded):
+        return False
+    selected = set(getattr(user_settings, "selected_countries", []) or [])
+    if selected:
+        origins = set(details.get("origin_country") or [])
+        origins.update(country.get("iso_3166_1") for country in details.get("production_countries", []))
+        if not selected.intersection(origins):
+            return False
+    return True
 
 
 def filter_items_by_settings(
